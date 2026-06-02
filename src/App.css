@@ -1,0 +1,9 @@
+/*
+ * App.css — custom overrides on top of the base Tailwind setup.
+ * Most styles live in index.css. Put component-specific CSS here if needed.
+ */
+
+/* Fix: Tailwind v4 doesn't add outline-none on focus by default */
+button:focus:not(:focus-visible) {
+  outline: none;
+}
