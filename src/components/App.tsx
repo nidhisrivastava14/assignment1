@@ -73,6 +73,8 @@ function validateSchemaConfig(config: any) {
 interface SystemAlert {
   type: 'success' | 'error' | 'warning' | 'info';
   message: string;
+  details?: string;
+  action?: { label: string; callback: () => void };
 }
 
 interface EditingRecord {
@@ -81,7 +83,6 @@ interface EditingRecord {
 }
 
 function AppContent() {
-  // Cast hook context to any to prevent TS context resolution warnings
   const apiContext = useApiConfig() as any;
   const {
     authToken,
@@ -95,7 +96,8 @@ function AppContent() {
     createRecord,
     updateRecord,
     deleteRecord,
-    setActiveSchema
+    setActiveSchema,
+    apiLog
   } = apiContext;
 
   const [activeResource, setActiveResource] = useState('users');
@@ -105,6 +107,8 @@ function AppContent() {
   const [editingRecord, setEditingRecord] = useState<EditingRecord | null>(null);
   const [formSaving, setFormSaving] = useState(false);
   const [systemAlert, setSystemAlert] = useState<SystemAlert | null>(null);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
   // Read URL query parameter for debug mode initialization
   const [debugMode, setDebugMode] = useState<boolean>(() => {
@@ -131,6 +135,27 @@ function AppContent() {
     }
   }, [activeSchema, activeResource]);
 
+  // Query audit logs timeline from backend
+  const fetchAuditLogs = async () => {
+    if (!debugMode || !activeSchema) return;
+    try {
+      const response = await fetch(`http://localhost:5000/api/${activeResource}/audit`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAuditLogs(data);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch audit timeline logs:", err);
+    }
+  };
+
+  // Re-fetch timeline when debug mode activates or records update
+  useEffect(() => {
+    fetchAuditLogs();
+  }, [debugMode, activeResource, activeSchema, records]);
+
   // Calculate live schema config warning validation logs
   const schemaValidatorWarnings = useMemo(() => {
     try {
@@ -140,6 +165,38 @@ function AppContent() {
       return ["JSON Syntax Error: Invalid JSON configuration structure. Review formatting."];
     }
   }, [jsonInput]);
+
+  // Load and apply static pre-defined sample configs using standard fetch
+  const loadSampleConfig = async (path: string) => {
+    setSystemAlert(null);
+    try {
+      const response = await fetch(path);
+      if (!response.ok) {
+        throw new Error(`Server returned status: ${response.status}`);
+      }
+      const config = await response.json();
+      setJsonInput(JSON.stringify(config, null, 2));
+      setJsonError(null);
+      setSystemAlert({
+        type: 'success',
+        message: `Loaded predefined config: ${path.split('/').pop()}`,
+        action: {
+          label: 'Apply Instantly',
+          callback: () => {
+            setActiveSchema((prev: any) => ({
+              ...prev,
+              config: config
+            }));
+          }
+        }
+      });
+    } catch (err: any) {
+      setSystemAlert({
+        type: 'error',
+        message: `Failed to load sample config: ${err.message}`
+      });
+    }
+  };
 
   // Handle side sidebar editor manual typing changes
   const handleJsonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -165,7 +222,6 @@ function AppContent() {
     try {
       const parsedConfig = JSON.parse(jsonInput);
       
-      // Hit update schema endpoint using active schema id
       const response = await fetch(`http://localhost:5000/api/schemas/${activeSchema.id}`, {
         method: 'PUT',
         headers: {
@@ -180,14 +236,10 @@ function AppContent() {
         throw new Error(updated.error || "Failed to update schema configuration");
       }
 
-      // Sync active schema state trigger
       setActiveSchema(updated);
-      // Refresh local cache key
       localStorage.setItem(`ds_schema_${activeResource}`, JSON.stringify(updated));
       
       setSystemAlert({ type: 'success', message: `Schema updated successfully! Incremented to version v${updated.version}.` });
-      
-      // Reload records to sync
       await fetchRecords(activeResource);
     } catch (err: any) {
       setSystemAlert({ type: 'error', message: err.message });
@@ -219,7 +271,19 @@ function AppContent() {
         setSystemAlert({ type: 'success', message: "New record created successfully in database." });
       }
     } catch (err: any) {
-      setSystemAlert({ type: 'error', message: err.message });
+      // Catch rich validation errors and display detailed formatting
+      if (err.fields) {
+        setSystemAlert({
+          type: 'error',
+          message: 'Input Validation Failed',
+          details: err.fields.map((f: any) => `⚠️ [Field: ${f.field}] - ${f.message}`).join('\n')
+        });
+      } else {
+        setSystemAlert({
+          type: 'error',
+          message: err.message || 'Operation failed'
+        });
+      }
     } finally {
       setFormSaving(false);
     }
@@ -227,7 +291,6 @@ function AppContent() {
 
   // Click handler to load row into form edit state
   const handleEditClick = (record: any) => {
-    // Extract row fields excluding system metadata keys
     const { id, created_at, updated_at, ...cleanData } = record;
     setEditingRecord({ id, data: cleanData });
     setSystemAlert({ type: 'info', message: `Loaded edit mode for record: ${id.substring(0, 8)}...` });
@@ -245,35 +308,6 @@ function AppContent() {
     } catch (err: any) {
       setSystemAlert({ type: 'error', message: err.message });
     }
-  };
-
-  // Pre-load broken config to demonstrate graceful degradation
-  const loadBrokenConfigExample = () => {
-    const broken = {
-      name: "Broken App Test Layout",
-      version: 99,
-      layout: "form",
-      sections: [
-        {
-          name: "Broken Inputs Section",
-          fields: [
-            { name: "email" }, // Missing type property (should render as read-only)
-            { name: "age", type: "number", required: true }, // Standard validator field
-            { type: "text" }, // Missing name parameter (should silent fail)
-            { name: "unsupported", type: "weird-structure", label: "Broken Custom Type" } // Unknown type (should fall back to read-only block)
-          ]
-        },
-        {
-          name: null // Invalid section name (should handle gracefully)
-        }
-      ]
-    };
-    setJsonInput(JSON.stringify(broken, null, 2));
-    setJsonError(null);
-    setSystemAlert({
-      type: 'warning',
-      message: "Broken configuration loaded into local editor. Click 'Apply Schema' or 'Apply Local' to test rendering."
-    });
   };
 
   // Force local config apply directly without database writes (local sandbox preview)
@@ -295,7 +329,7 @@ function AppContent() {
     }
   };
 
-  // Theme switcher helper (toggles dark class on root documentElement)
+  // Theme switcher helper
   const [themeMode, setThemeMode] = useState(() => {
     return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
   });
@@ -316,7 +350,7 @@ function AppContent() {
     if (!activeSchema || !activeSchema.config) {
       return (
         <div className="ds-empty-section-container">
-          No schema structure currently loaded. Please create a schema config.
+          No schema structure currently loaded. Please select a resource or load configs.
         </div>
       );
     }
@@ -331,11 +365,9 @@ function AppContent() {
       );
     }
 
-    // Render tree mapping with fallback and error containment boundaries
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         {sections.map((section: any, sIndex: number) => {
-          // Graceful degradation: wrap each section in an error boundary so section failure does not crash app
           const sectionKey = (section && typeof section === 'object' && section.id) || `sec-${sIndex}`;
           
           if (!section || typeof section !== 'object') {
@@ -385,7 +417,6 @@ function AppContent() {
                     );
 
                   default:
-                    // Treat unknown section layouts as table if widgets/fields mismatch
                     if (section.fields) {
                       return (
                         <FormBuilder
@@ -429,8 +460,26 @@ function AppContent() {
             fontSize: '18px'
           }}>DS</div>
           <span style={{ fontWeight: 800, fontSize: '18px', letterSpacing: '-0.03em' }}>
-            DynamicStack <span style={{ color: 'var(--primary-color)', fontSize: '12px', fontWeight: 600 }}>v1.0</span>
+            DynamicStack <span style={{ color: 'var(--primary-color)', fontSize: '12px', fontWeight: 600 }}>v1.1</span>
           </span>
+        </div>
+
+        {/* Predefined Config Loaders */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button 
+            onClick={() => loadSampleConfig('/configs/sample.users.json')}
+            className="ds-btn ds-btn-secondary"
+            style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', margin: 0 }}
+          >
+            📁 Load Sample Users
+          </button>
+          <button 
+            onClick={() => loadSampleConfig('/configs/sample.broken.json')}
+            className="ds-btn ds-btn-secondary"
+            style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', margin: 0, borderColor: 'var(--warning-border)' }}
+          >
+            📁 Load Broken Config
+          </button>
         </div>
 
         {/* Dynamic selector to switch schema models */}
@@ -524,19 +573,11 @@ function AppContent() {
             >
               {isSavingSchema ? 'Saving to Database...' : '💾 Save Config & Sync API'}
             </button>
-
-            <button
-              className="ds-btn ds-btn-secondary"
-              style={{ width: '100%', padding: '6px', fontSize: '11px', borderStyle: 'dashed' }}
-              onClick={loadBrokenConfigExample}
-            >
-              ⚠️ Load Broken Config Example
-            </button>
           </div>
 
           {/* DEBUG PANEL: Shown if debugMode = true */}
           {debugMode && (
-            <div style={{ borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', overflowY: 'auto', flex: 1 }}>
               
               {/* 1. Real-time Config warnings validator */}
               <div style={{ padding: '16px' }}>
@@ -558,7 +599,7 @@ function AppContent() {
                 </div>
               </div>
 
-              {/* 2. Interactive user switcher (scopes / Authorization tests) */}
+              {/* 2. Interactive user switcher */}
               <div style={{ padding: '16px', borderTop: '1px solid var(--border-color)', backgroundColor: 'var(--bg-tertiary)' }}>
                 <h4 style={{ margin: '0 0 10px 0', fontSize: '12px', fontWeight: 700 }}>
                   👤 Multi-Tenant Scoping / Switch Role
@@ -609,8 +650,115 @@ function AppContent() {
                 </div>
               </div>
 
-              {/* 3. API state monitoring */}
-              <div className="ds-debug-grid">
+              {/* 3. Audit Log Timeline Viewer (Bonus Points) */}
+              <div style={{ padding: '16px', borderTop: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <h4 style={{ margin: 0, fontSize: '12px', fontWeight: 700 }}>
+                    📜 Audit Log Timeline ({auditLogs.length})
+                  </h4>
+                  <button 
+                    onClick={fetchAuditLogs} 
+                    style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '11px', color: 'var(--primary-color)' }}
+                  >
+                    🔄 Refresh
+                  </button>
+                </div>
+                {auditLogs.length === 0 ? (
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>No audit events logged for this resource yet.</span>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }}>
+                    {auditLogs.map((log: any) => {
+                      const isExpanded = expandedLogId === log.id;
+                      return (
+                        <div key={log.id} style={{
+                          fontSize: '11px',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '6px',
+                          padding: '6px 8px',
+                          backgroundColor: 'var(--bg-tertiary)'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span className={`ds-table-badge`} style={{
+                              fontWeight: 'bold',
+                              fontSize: '9px',
+                              backgroundColor: log.action === 'INSERT' ? 'var(--success-bg)' : log.action === 'UPDATE' ? '#e0e7ff' : log.action === 'DELETE' ? 'var(--error-bg)' : '#f3e8ff',
+                              color: log.action === 'INSERT' ? 'var(--success-color)' : log.action === 'UPDATE' ? 'var(--primary-color)' : log.action === 'DELETE' ? 'var(--error-text)' : '#7e22ce',
+                              border: `1px solid ${log.action === 'INSERT' ? 'var(--success-border)' : log.action === 'UPDATE' ? '#cbd5e1' : log.action === 'DELETE' ? 'var(--error-border)' : '#d8b4fe'}`
+                            }}>
+                              {log.action}
+                            </span>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '10px' }}>
+                              {new Date(log.timestamp).toLocaleTimeString()}
+                            </span>
+                          </div>
+                          <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>User: <strong>{log.user_id}</strong></span>
+                            <button 
+                              onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary-color)', fontSize: '10px', padding: 0 }}
+                            >
+                              {isExpanded ? 'Hide Diff' : 'View Diff'}
+                            </button>
+                          </div>
+                          {isExpanded && (
+                            <pre style={{
+                              marginTop: '6px',
+                              padding: '4px',
+                              backgroundColor: 'rgba(0,0,0,0.05)',
+                              borderRadius: '4px',
+                              overflowX: 'auto',
+                              fontSize: '9px',
+                              maxHeight: '100px'
+                            }}>
+                              {JSON.stringify({ old: log.old_data, new: log.new_data }, null, 2)}
+                            </pre>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Live API Call Logger Panel */}
+              <div style={{ padding: '16px', borderTop: '1px solid var(--border-color)', backgroundColor: 'var(--bg-tertiary)' }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '12px', fontWeight: 700 }}>
+                  🌐 HTTP API Request Log (Last 10)
+                </h4>
+                {apiLog.length === 0 ? (
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Waiting for API requests traffic...</span>
+                ) : (
+                  <div style={{ overflowX: 'auto', maxHeight: '160px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                          <th style={{ padding: '4px' }}>Method</th>
+                          <th style={{ padding: '4px' }}>Path</th>
+                          <th style={{ padding: '4px' }}>Status</th>
+                          <th style={{ padding: '4px' }}>Duration</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...apiLog].reverse().map((call: any, idx: number) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ padding: '4px', fontWeight: 'bold' }}>{call.method}</td>
+                            <td style={{ padding: '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '100px' }} title={call.url}>
+                              {call.url.split('/').slice(-2).join('/')}
+                            </td>
+                            <td style={{ padding: '4px', color: call.status >= 200 && call.status < 300 ? 'var(--success-color)' : 'var(--error-text)' }}>
+                              {call.status}
+                            </td>
+                            <td style={{ padding: '4px' }}>{call.duration}ms</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* 5. API state monitoring */}
+              <div className="ds-debug-grid" style={{ marginTop: 'auto' }}>
                 <div className="ds-debug-line">
                   <span className="ds-debug-key">Active User:</span>
                   <span className="ds-debug-val">{currentUser?.username} ({currentUser?.role})</span>
@@ -621,15 +769,7 @@ function AppContent() {
                 </div>
                 <div className="ds-debug-line">
                   <span className="ds-debug-key">X-Schema Header:</span>
-                  <span className="ds-debug-val" style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '200px' }}>
-                    Active
-                  </span>
-                </div>
-                <div className="ds-debug-line">
-                  <span className="ds-debug-key">Token Payload:</span>
-                  <span className="ds-debug-val" style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '200px' }}>
-                    {authToken ? 'Bearer ' + authToken.substring(0, 10) + '...' : 'None'}
-                  </span>
+                  <span className="ds-debug-val">Active</span>
                 </div>
               </div>
             </div>
@@ -640,7 +780,7 @@ function AppContent() {
         <section className="ds-preview-panel">
           {/* Notification System Alerts */}
           {systemAlert && (
-            <div style={{
+            <div className={`ds-alert ds-alert-${systemAlert.type}`} style={{
               padding: '12px 18px',
               borderRadius: '8px',
               fontSize: '13px',
@@ -649,16 +789,58 @@ function AppContent() {
               color: systemAlert.type === 'success' ? 'var(--success-color)' : systemAlert.type === 'error' ? 'var(--error-text)' : 'var(--warning-color)',
               border: `1px solid ${systemAlert.type === 'success' ? 'var(--success-border)' : systemAlert.type === 'error' ? 'var(--error-border)' : 'var(--warning-border)'}`,
               display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
+              flexDirection: 'column',
+              gap: '8px',
+              boxShadow: 'var(--card-shadow)'
             }}>
-              <span>{systemAlert.message}</span>
-              <button
-                style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontWeight: 'bold' }}
-                onClick={() => setSystemAlert(null)}
-              >
-                ✕
-              </button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <strong>{systemAlert.message}</strong>
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {systemAlert.action && (
+                    <button 
+                      onClick={systemAlert.action.callback}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        backgroundColor: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-color)',
+                        color: 'inherit',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {systemAlert.action.label}
+                    </button>
+                  )}
+                  <button
+                    style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontWeight: 'bold' }}
+                    onClick={() => setSystemAlert(null)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+              {systemAlert.details && (
+                <pre style={{
+                  margin: 0,
+                  padding: '8px 12px',
+                  backgroundColor: 'rgba(0,0,0,0.05)',
+                  border: '1px solid rgba(0,0,0,0.05)',
+                  borderRadius: '6px',
+                  fontSize: '11px',
+                  fontFamily: 'monospace',
+                  whiteSpace: 'pre-wrap',
+                  maxHeight: '120px',
+                  overflowY: 'auto',
+                  color: 'inherit',
+                  textAlign: 'left'
+                }}>
+                  {systemAlert.details}
+                </pre>
+              )}
             </div>
           )}
 

@@ -1,0 +1,47 @@
+{
+  "name": "User Management",
+  "layout": "hybrid",
+  "sections": [
+    {
+      "name": "user_form",
+      "type": "form",
+      "fields": [
+        {
+          "name": "email",
+          "label": "Email Address",
+          "type": "email",
+          "required": true,
+          "placeholder": "john@example.com"
+        },
+        {
+          "name": "username",
+          "label": "Username",
+          "type": "text",
+          "required": true,
+          "pattern": "^[a-z0-9_]{3,}$"
+        },
+        {
+          "name": "role",
+          "label": "User Role",
+          "type": "select",
+          "options": ["admin", "user", "viewer"],
+          "required": true
+        },
+        {
+          "name": "active",
+          "label": "Is Active",
+          "type": "checkbox"
+        }
+      ]
+    },
+    {
+      "name": "users_table",
+      "type": "table",
+      "columns": [
+        { "key": "email", "header": "Email Address", "sortable": true },
+        { "key": "username", "header": "User Name", "sortable": true },
+        { "key": "role", "header": "Role", "sortable": true }
+      ]
+    }
+  ]
+}

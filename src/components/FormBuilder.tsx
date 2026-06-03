@@ -1,10 +1,38 @@
-import React from 'react';
+import React, { useState } from 'react';
 import useFormConfig from '../hooks/useFormConfig';
+import { useApiConfig } from '../hooks/useApiConfig';
 import ErrorBoundary from './ErrorBoundary';
 
-// Individual field renderer wrapper with isolated ErrorBoundary fallback
-function FormFieldWrapper({ field, value, error, onChange }) {
-  // Silent fail if definition is invalid or missing name
+export interface FormField {
+  name: string;
+  label?: string;
+  type: 'text' | 'email' | 'number' | 'date' | 'textarea' | 'select' | 'checkbox' | string;
+  placeholder?: string;
+  required?: boolean;
+  pattern?: string;
+  options?: string[];
+  defaultValue?: any;
+}
+
+export interface FormBuilderProps {
+  section: {
+    name: string;
+    fields: FormField[];
+  };
+  onSubmit: (data: Record<string, any>) => Promise<void>;
+  initialData?: Record<string, any> | null;
+  loading?: boolean;
+  isSaving?: boolean;
+}
+
+interface FormFieldWrapperProps {
+  field: FormField;
+  value: any;
+  error: string;
+  onChange: (name: string, value: any) => void;
+}
+
+function FormFieldWrapper({ field, value, error, onChange }: FormFieldWrapperProps) {
   if (!field || typeof field !== 'object' || !field.name) {
     return null;
   }
@@ -12,8 +40,10 @@ function FormFieldWrapper({ field, value, error, onChange }) {
   const { name, label, type, placeholder, options } = field;
   const normalizedType = (type || 'text').toLowerCase();
 
-  const handleInputChange = (e) => {
-    const val = normalizedType === 'checkbox' ? e.target.checked : e.target.value;
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const val = normalizedType === 'checkbox' 
+      ? (e.target as HTMLInputElement).checked 
+      : e.target.value;
     onChange(name, val);
   };
 
@@ -114,7 +144,6 @@ function FormFieldWrapper({ field, value, error, onChange }) {
               );
 
             default:
-              // Unknown field type: render as read-only text block
               return (
                 <div className="ds-readonly-fallback-wrapper">
                   <input
@@ -137,8 +166,19 @@ function FormFieldWrapper({ field, value, error, onChange }) {
   );
 }
 
-export function FormBuilder({ section, onSubmit, initialData = null, isSaving = false, loading = false }) {
-  // Graceful degradation: invalid section checks
+export const FormBuilder: React.FC<FormBuilderProps> = ({ 
+  section, 
+  onSubmit, 
+  initialData = null, 
+  isSaving = false, 
+  loading = false 
+}) => {
+  const apiContext = useApiConfig() as any;
+  const { authToken, activeSchema, fetchRecords } = apiContext;
+
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvImporting, setCsvImporting] = useState(false);
+
   if (!section || typeof section !== 'object') {
     return (
       <div className="ds-section-fallback ds-section-error">
@@ -150,21 +190,65 @@ export function FormBuilder({ section, onSubmit, initialData = null, isSaving = 
   const sectionName = section.name || "Form Section";
   const fields = section.fields || [];
   
-  // Filter out completely invalid or missing field definitions
   const validFields = fields.filter(
     f => f && typeof f === 'object' && f.name
   );
 
-  const { values, errors, handleChange, validate, reset } = useFormConfig(validFields, initialData);
+  const { values, errors, handleChange, validate, reset } = useFormConfig(validFields, initialData as any) as any;
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (validate()) {
-      onSubmit(values);
+      onSubmit(values).catch((err: any) => {
+        // Map backend validation arrays inline if returned
+        if (err.message && err.message.includes("Validation failed")) {
+          console.warn("Handling validation warnings inline.");
+        }
+      });
     }
   };
 
-  // Rendering Loading Skeleton state
+  const handleCsvUpload = async () => {
+    if (!csvFile || !activeSchema) return;
+    
+    setCsvImporting(true);
+    const formData = new FormData();
+    formData.append('file', csvFile);
+    
+    try {
+      const response = await fetch(`http://localhost:5000/api/${activeSchema.name}/import-csv`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${authToken}` },
+        body: formData
+      });
+      
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "CSV Import failed");
+      }
+
+      // Trigger system alert inside context if supported, or window alert fallback
+      if (apiContext.setError) {
+        apiContext.setError(`📥 CSV Import Success: Imported ${result.imported}/${result.total} records.`);
+      } else {
+        alert(`Imported ${result.imported}/${result.total} records`);
+      }
+
+      // Reset CSV selector
+      setCsvFile(null);
+      // Re-query collection
+      await fetchRecords(activeSchema.name);
+    } catch (err: any) {
+      if (apiContext.setError) {
+        apiContext.setError(`❌ CSV Import Error: ${err.message}`);
+      } else {
+        alert(`CSV Import failed: ${err.message}`);
+      }
+    } finally {
+      setCsvImporting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="ds-form-card ds-skeleton-card">
@@ -181,7 +265,6 @@ export function FormBuilder({ section, onSubmit, initialData = null, isSaving = 
     );
   }
 
-  // Section with no valid fields: render an empty container (not nothing)
   if (validFields.length === 0) {
     return (
       <div className="ds-form-card ds-empty-section">
@@ -195,7 +278,47 @@ export function FormBuilder({ section, onSubmit, initialData = null, isSaving = 
 
   return (
     <div className="ds-form-card">
-      <h3 className="ds-section-heading">{sectionName}</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+        <h3 className="ds-section-heading" style={{ marginBottom: 0 }}>{sectionName}</h3>
+        
+        {/* CSV Import Widget Panel */}
+        <div className="ds-csv-import-panel" style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '6px 12px',
+          backgroundColor: 'var(--bg-tertiary)',
+          borderRadius: '8px',
+          border: '1px solid var(--border-color)',
+          fontSize: '12px'
+        }}>
+          <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>CSV Import:</span>
+          <input 
+            type="file" 
+            accept=".csv" 
+            id="csv-file-picker"
+            style={{ display: 'none' }}
+            onChange={(e) => setCsvFile(e.target.files?.[0] || null)} 
+          />
+          <label htmlFor="csv-file-picker" className="ds-btn ds-btn-secondary" style={{
+            padding: '4px 8px',
+            fontSize: '11px',
+            cursor: 'pointer',
+            margin: 0
+          }}>
+            {csvFile ? `📄 ${csvFile.name}` : '📁 Choose CSV'}
+          </label>
+          <button 
+            onClick={handleCsvUpload} 
+            disabled={!csvFile || csvImporting} 
+            className="ds-btn ds-btn-primary" 
+            style={{ padding: '4px 8px', fontSize: '11px', margin: 0 }}
+          >
+            {csvImporting ? 'Importing...' : '📥 Import CSV'}
+          </button>
+        </div>
+      </div>
+
       <form onSubmit={handleFormSubmit} className="ds-form-layout" noValidate>
         <div className="ds-form-grid">
           {validFields.map(field => (
@@ -232,6 +355,6 @@ export function FormBuilder({ section, onSubmit, initialData = null, isSaving = 
       </form>
     </div>
   );
-}
+};
 
 export default FormBuilder;

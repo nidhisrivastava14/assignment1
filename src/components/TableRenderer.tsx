@@ -1,16 +1,58 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 
-export function TableRenderer({ section, records = [], onEdit, onDelete, loading = false, error = null }) {
+export interface TableColumn {
+  key: string;
+  header?: string;
+  sortable?: boolean;
+}
+
+export interface TableRendererProps {
+  section: {
+    name: string;
+    columns?: (TableColumn | string)[];
+    sortable?: boolean;
+    filterable?: boolean;
+  };
+  records?: Record<string, any>[];
+  onEdit?: (record: Record<string, any>) => void;
+  onDelete?: (id: string) => void;
+  loading?: boolean;
+  error?: string | null;
+}
+
+export const TableRenderer: React.FC<TableRendererProps> = ({ 
+  section, 
+  records = [], 
+  onEdit, 
+  onDelete, 
+  loading = false, 
+  error = null 
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortKey, setSortKey] = useState('');
-  const [sortDirection, setSortDirection] = useState('asc'); // 'asc' or 'desc'
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [showColumnDropdown, setShowColumnDropdown] = useState(false);
 
   const sectionName = section?.name || "Data Records Table";
 
-  // Graceful degradation: determine columns dynamically from records if not defined in schema
-  const columns = useMemo(() => {
-    if (section?.columns && Array.isArray(section.columns) && section.columns.length > 0) {
-      return section.columns.filter(c => c && typeof c === 'object');
+  // Normalize column definitions from section schema (handles strings & objects)
+  const columns = useMemo<TableColumn[]>(() => {
+    const rawColumns = section?.columns;
+    if (rawColumns && Array.isArray(rawColumns) && rawColumns.length > 0) {
+      return rawColumns.map(c => {
+        if (typeof c === 'string') {
+          return {
+            key: c,
+            header: c.charAt(0).toUpperCase() + c.slice(1).replace(/_/g, ' '),
+            sortable: section.sortable !== false
+          };
+        }
+        return {
+          key: c.key,
+          header: c.header || c.key,
+          sortable: c.sortable !== false && section.sortable !== false
+        };
+      });
     }
     
     // Fallback: derive columns from data keys
@@ -26,8 +68,18 @@ export function TableRenderer({ section, records = [], onEdit, onDelete, loading
     return [];
   }, [section, records]);
 
+  // Set visible column keys (toggleable)
+  const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
+
+  // Re-sync visible columns whenever columns definition updates
+  useEffect(() => {
+    if (columns.length > 0) {
+      setVisibleKeys(new Set(columns.map(c => c.key)));
+    }
+  }, [columns]);
+
   // Handle header sorting click toggles
-  const handleSort = (key, sortable) => {
+  const handleSort = (key: string, sortable?: boolean) => {
     if (!sortable) return;
     if (sortKey === key) {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -36,6 +88,27 @@ export function TableRenderer({ section, records = [], onEdit, onDelete, loading
       setSortDirection('asc');
     }
   };
+
+  // Toggle single column visibility
+  const toggleColumnVisibility = (key: string) => {
+    setVisibleKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        // Prevent hiding the last column
+        if (next.size > 1) {
+          next.delete(key);
+        }
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  // Filter columns based on visibility state
+  const visibleColumns = useMemo(() => {
+    return columns.filter(col => visibleKeys.has(col.key));
+  }, [columns, visibleKeys]);
 
   // Filter and Sort records locally
   const processedRecords = useMemo(() => {
@@ -74,7 +147,7 @@ export function TableRenderer({ section, records = [], onEdit, onDelete, loading
   }, [records, searchTerm, sortKey, sortDirection]);
 
   // Render Cell content gracefully
-  const renderCell = (value, columnKey) => {
+  const renderCell = (value: any, columnKey: string) => {
     if (value === undefined || value === null) {
       return <span className="ds-table-null-cell">—</span>;
     }
@@ -92,6 +165,15 @@ export function TableRenderer({ section, records = [], onEdit, onDelete, loading
     // Check if column indicates email or date format
     if (columnKey.toLowerCase().includes('email')) {
       return <a href={`mailto:${value}`} className="ds-table-email-link">{value}</a>;
+    }
+
+    // Format timestamps nicely
+    if (columnKey === 'created_at' || columnKey === 'updated_at') {
+      try {
+        return new Date(value).toLocaleString();
+      } catch {
+        return String(value);
+      }
     }
     
     return String(value);
@@ -127,23 +209,67 @@ export function TableRenderer({ section, records = [], onEdit, onDelete, loading
   return (
     <div className="ds-table-card">
       <div className="ds-table-header-row">
-        <h3 className="ds-section-heading">{sectionName}</h3>
-        {records.length > 0 && (
-          <div className="ds-search-wrapper">
-            <input
-              type="text"
-              placeholder="Search records..."
-              className="ds-search-input"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            {searchTerm && (
-              <button className="ds-search-clear-btn" onClick={() => setSearchTerm('')}>
-                ✕
-              </button>
+        <h3 className="ds-section-heading" style={{ marginBottom: 0 }}>{sectionName}</h3>
+        
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Column Visibility Selector Toggle */}
+          <div style={{ position: 'relative' }}>
+            <button 
+              className="ds-btn ds-btn-secondary" 
+              style={{ padding: '8px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
+              onClick={() => setShowColumnDropdown(prev => !prev)}
+            >
+              ⚙️ Columns ({visibleColumns.length}/{columns.length})
+            </button>
+            {showColumnDropdown && (
+              <div style={{
+                position: 'absolute',
+                right: 0,
+                top: '40px',
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                padding: '12px',
+                boxShadow: 'var(--card-shadow)',
+                zIndex: 10,
+                minWidth: '160px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)' }}>Toggle Columns:</span>
+                {columns.map(col => (
+                  <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={visibleKeys.has(col.key)} 
+                      onChange={() => toggleColumnVisibility(col.key)} 
+                      disabled={visibleKeys.has(col.key) && visibleKeys.size === 1}
+                    />
+                    <span>{col.header || col.key}</span>
+                  </label>
+                ))}
+              </div>
             )}
           </div>
-        )}
+
+          {records.length > 0 && (
+            <div className="ds-search-wrapper">
+              <input
+                type="text"
+                placeholder="Search records..."
+                className="ds-search-input"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              {searchTerm && (
+                <button className="ds-search-clear-btn" onClick={() => setSearchTerm('')}>
+                  ✕
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {columns.length === 0 ? (
@@ -163,11 +289,11 @@ export function TableRenderer({ section, records = [], onEdit, onDelete, loading
           </p>
         </div>
       ) : (
-        <div className="ds-table-responsive-container">
-          <table className="ds-table">
+        <div className="ds-table-responsive-container" style={{ overflowX: 'auto', width: '100%' }}>
+          <table className="ds-table" style={{ width: '100%', minWidth: '600px' }}>
             <thead>
               <tr>
-                {columns.map(col => (
+                {visibleColumns.map(col => (
                   <th
                     key={col.key}
                     onClick={() => handleSort(col.key, col.sortable)}
@@ -192,7 +318,7 @@ export function TableRenderer({ section, records = [], onEdit, onDelete, loading
             <tbody>
               {processedRecords.map(row => (
                 <tr key={row.id}>
-                  {columns.map(col => (
+                  {visibleColumns.map(col => (
                     <td key={col.key}>
                       {renderCell(row[col.key], col.key)}
                     </td>
@@ -213,11 +339,7 @@ export function TableRenderer({ section, records = [], onEdit, onDelete, loading
                           <button
                             className="ds-action-btn ds-delete-btn"
                             title="Delete Record"
-                            onClick={() => {
-                              if (window.confirm("Are you sure you want to delete this record?")) {
-                                onDelete(row.id);
-                              }
-                            }}
+                            onClick={() => onDelete(row.id)}
                           >
                             🗑️
                           </button>
@@ -236,6 +358,6 @@ export function TableRenderer({ section, records = [], onEdit, onDelete, loading
       )}
     </div>
   );
-}
+};
 
 export default TableRenderer;

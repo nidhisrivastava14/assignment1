@@ -1,8 +1,34 @@
 import React from 'react';
 import ErrorBoundary from './ErrorBoundary';
 
-// Helper component to render specific widget contents
-function DashboardWidget({ widget }) {
+export interface DashboardWidgetType {
+  id: string;
+  title: string;
+  type: 'metric' | 'chart' | 'activity' | 'list' | string;
+  value?: string | number;
+  subtext?: string;
+  grid?: {
+    x?: number;
+    y?: number;
+    w?: number;
+    h?: number;
+  };
+}
+
+export interface DashboardGridProps {
+  section: {
+    name: string;
+    widgets: DashboardWidgetType[];
+  };
+  loading?: boolean;
+  error?: string | null;
+}
+
+interface DashboardWidgetWrapperProps {
+  widget: DashboardWidgetType;
+}
+
+function DashboardWidget({ widget }: DashboardWidgetWrapperProps) {
   if (!widget || typeof widget !== 'object' || !widget.id) {
     return null;
   }
@@ -38,13 +64,12 @@ function DashboardWidget({ widget }) {
                       <span className="ds-chart-val">{value || '$0'}</span>
                       <span className="ds-chart-lbl">{subtext || 'Monthly Target'}</span>
                     </div>
-                    {/* CSS-only mini bar chart for premium aesthetic */}
                     <div className="ds-mini-bar-chart">
-                      <div className="ds-chart-bar" style={{ height: '35%', '--bar-color': '#818cf8' }}></div>
-                      <div className="ds-chart-bar" style={{ height: '55%', '--bar-color': '#6366f1' }}></div>
-                      <div className="ds-chart-bar" style={{ height: '40%', '--bar-color': '#4f46e5' }}></div>
-                      <div className="ds-chart-bar" style={{ height: '75%', '--bar-color': '#3b82f6' }}></div>
-                      <div className="ds-chart-bar" style={{ height: '90%', '--bar-color': '#10b981' }}></div>
+                      <div className="ds-chart-bar" style={{ height: '35%', '--bar-color': '#818cf8' } as React.CSSProperties}></div>
+                      <div className="ds-chart-bar" style={{ height: '55%', '--bar-color': '#6366f1' } as React.CSSProperties}></div>
+                      <div className="ds-chart-bar" style={{ height: '40%', '--bar-color': '#4f46e5' } as React.CSSProperties}></div>
+                      <div className="ds-chart-bar" style={{ height: '75%', '--bar-color': '#3b82f6' } as React.CSSProperties}></div>
+                      <div className="ds-chart-bar" style={{ height: '90%', '--bar-color': '#10b981' } as React.CSSProperties}></div>
                     </div>
                   </div>
                 );
@@ -92,16 +117,18 @@ function DashboardWidget({ widget }) {
   );
 }
 
-export function DashboardGrid({ section, loading = false, error = null }) {
+export const DashboardGrid: React.FC<DashboardGridProps> = ({ 
+  section, 
+  loading = false, 
+  error = null 
+}) => {
   const sectionName = section?.name || "Operations Dashboard";
   const widgets = section?.widgets || [];
 
-  // Filter valid widgets
   const validWidgets = widgets.filter(
     w => w && typeof w === 'object' && w.id
   );
 
-  // Skeletons loader state
   if (loading) {
     return (
       <div className="ds-dashboard-card ds-skeleton-card">
@@ -115,7 +142,6 @@ export function DashboardGrid({ section, loading = false, error = null }) {
     );
   }
 
-  // Dashboard rendering errors
   if (error) {
     return (
       <div className="ds-dashboard-card ds-dashboard-error">
@@ -128,7 +154,6 @@ export function DashboardGrid({ section, loading = false, error = null }) {
     );
   }
 
-  // Empty dashboard widgets definition
   if (validWidgets.length === 0) {
     return (
       <div className="ds-dashboard-card">
@@ -145,14 +170,12 @@ export function DashboardGrid({ section, loading = false, error = null }) {
       <h3 className="ds-section-heading">{sectionName}</h3>
       <div className="ds-dashboard-grid-container">
         {validWidgets.map(widget => {
-          // Compute CSS Grid coordinates dynamically from config values
           const gridConfig = widget.grid || {};
-          const style = {
+          const style: React.CSSProperties = {
             gridColumn: gridConfig.w ? `span ${gridConfig.w}` : 'span 4',
             gridRow: gridConfig.h ? `span ${gridConfig.h}` : 'span 2'
           };
           
-          // Optional exact position mapping if x/y offsets are provided
           if (gridConfig.x !== undefined) {
             style.gridColumnStart = gridConfig.x + 1;
             style.gridColumnEnd = `span ${gridConfig.w || 4}`;
@@ -171,6 +194,6 @@ export function DashboardGrid({ section, loading = false, error = null }) {
       </div>
     </div>
   );
-}
+};
 
 export default DashboardGrid;

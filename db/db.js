@@ -255,7 +255,7 @@ export const db = {
 
     // ── APP DATA QUERIES ──
     if (sql.startsWith('SELECT * FROM app_data')) {
-      if (sql.includes('id = $1')) {
+      if (/\bid = \$1\b/.test(sql)) {
         const id = params[0];
         const row = mockDb.app_data.find(d => d.id === id);
         return { rows: row ? [row] : [] };

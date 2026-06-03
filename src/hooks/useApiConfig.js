@@ -17,6 +17,45 @@ export function DynamicStackProvider({ children }) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [apiLog, setApiLog] = useState([]);
+
+  // Global fetch logger interceptor to record API traffic durations
+  useEffect(() => {
+    const originalFetch = window.fetch;
+    window.fetch = async (...args) => {
+      const start = Date.now();
+      try {
+        const response = await originalFetch(...args);
+        const duration = Date.now() - start;
+        setApiLog(prev => [
+          ...prev.slice(-9),
+          {
+            url: String(args[0]),
+            method: args[1]?.method || 'GET',
+            status: response.status,
+            duration
+          }
+        ]);
+        return response;
+      } catch (err) {
+        const duration = Date.now() - start;
+        setApiLog(prev => [
+          ...prev.slice(-9),
+          {
+            url: String(args[0]),
+            method: args[1]?.method || 'GET',
+            status: 0,
+            duration
+          }
+        ]);
+        throw err;
+      }
+    };
+
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
 
   // Sync token to storage on changes
   useEffect(() => {
@@ -171,7 +210,7 @@ export function DynamicStackProvider({ children }) {
       const errMsg = translateError(err.payload, err.status);
       setError(errMsg);
       setRecords([]);
-      throw new Error(errMsg);
+      throw { message: errMsg, fields: err.payload?.fields || null };
     } finally {
       setLoading(false);
     }
@@ -204,7 +243,7 @@ export function DynamicStackProvider({ children }) {
     } catch (err) {
       const errMsg = translateError(err.payload, err.status);
       setError(errMsg);
-      throw new Error(errMsg);
+      throw { message: errMsg, fields: err.payload?.fields || null };
     } finally {
       setLoading(false);
     }
@@ -237,7 +276,7 @@ export function DynamicStackProvider({ children }) {
     } catch (err) {
       const errMsg = translateError(err.payload, err.status);
       setError(errMsg);
-      throw new Error(errMsg);
+      throw { message: errMsg, fields: err.payload?.fields || null };
     } finally {
       setLoading(false);
     }
@@ -268,7 +307,7 @@ export function DynamicStackProvider({ children }) {
     } catch (err) {
       const errMsg = translateError(err.payload, err.status);
       setError(errMsg);
-      throw new Error(errMsg);
+      throw { message: errMsg, fields: err.payload?.fields || null };
     } finally {
       setLoading(false);
     }
@@ -287,7 +326,8 @@ export function DynamicStackProvider({ children }) {
     updateRecord,
     deleteRecord,
     setActiveSchema,
-    setError
+    setError,
+    apiLog
   };
 
   return React.createElement(
