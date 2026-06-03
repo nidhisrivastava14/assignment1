@@ -1,9 +1,787 @@
-/*
- * App.css — custom overrides on top of the base Tailwind setup.
- * Most styles live in index.css. Put component-specific CSS here if needed.
- */
+/* DynamicStack Custom Premium Design System */
 
-/* Fix: Tailwind v4 doesn't add outline-none on focus by default */
-button:focus:not(:focus-visible) {
+:root {
+  /* Harmonious Color Palette */
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --border-color: #e2e8f0;
+  
+  /* Brand accents */
+  --primary-color: #6366f1;
+  --primary-hover: #4f46e5;
+  --primary-light: #e0e7ff;
+  --accent-color: #06b6d4;
+  
+  /* System states */
+  --success-color: #10b981;
+  --success-bg: #ecfdf5;
+  --success-border: #a7f3d0;
+  --warning-color: #f59e0b;
+  --warning-bg: #fffbeb;
+  --warning-border: #fde68a;
+  --error-color: #ef4444;
+  --error-bg: #fef2f2;
+  --error-border: #fecaca;
+  --error-text: #dc2626;
+
+  /* Card and shadow aesthetics */
+  --card-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+  --border-radius: 12px;
+  --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dark Mode overrides via class root */
+.dark {
+  --bg-primary: #0b0f19;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1f2937;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #64748b;
+  --border-color: #374151;
+  
+  --primary-color: #818cf8;
+  --primary-hover: #6366f1;
+  --primary-light: #312e81;
+  
+  --success-bg: rgba(16, 185, 129, 0.1);
+  --success-border: rgba(16, 185, 129, 0.2);
+  --warning-bg: rgba(245, 158, 11, 0.1);
+  --warning-border: rgba(245, 158, 11, 0.2);
+  --error-bg: rgba(239, 68, 68, 0.1);
+  --error-border: rgba(239, 68, 68, 0.2);
+  --error-text: #fca5a5;
+
+  --card-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+/* Skeletons pulse animations */
+.skeleton {
+  background: linear-gradient(90deg, var(--border-color) 25%, var(--bg-tertiary) 50%, var(--border-color) 75%);
+  background-size: 200% 100%;
+  animation: loading-pulse 1.6s infinite ease-in-out;
+  border-radius: 6px;
+}
+
+@keyframes loading-pulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Layout Panels */
+.ds-app-container {
+  display: flex;
+  flex-direction: column;
+  min-h-screen: 100vh;
+}
+
+.ds-navbar {
+  background-color: var(--bg-secondary);
+  border-b: 1px solid var(--border-color);
+  padding: 12px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.ds-workspace {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  flex: 1;
+  height: calc(100vh - 65px);
+  overflow: hidden;
+}
+
+@media (max-width: 1024px) {
+  .ds-workspace {
+    grid-template-columns: 1fr;
+    height: auto;
+    overflow: auto;
+  }
+}
+
+.ds-editor-sidebar {
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.ds-preview-panel {
+  padding: 24px;
+  overflow-y: auto;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Premium Card wrapper design */
+.ds-form-card, .ds-table-card, .ds-dashboard-card {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 24px;
+  box-shadow: var(--card-shadow);
+  transition: var(--transition-smooth);
+}
+
+.ds-section-heading {
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  border-left: 4px solid var(--primary-color);
+  padding-left: 12px;
+}
+
+/* Custom form grid layout */
+.ds-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.ds-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ds-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.ds-required-indicator {
+  color: var(--error-color);
+}
+
+/* Custom Input controls */
+.ds-input, .ds-textarea, .ds-select {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
   outline: none;
+  transition: var(--transition-smooth);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ds-input:focus, .ds-textarea:focus, .ds-select:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  background-color: var(--bg-secondary);
+}
+
+.ds-input-error {
+  border-color: var(--error-color) !important;
+}
+
+/* Custom Select Dropdown chevron */
+.ds-select-container {
+  position: relative;
+  width: 100%;
+}
+
+.ds-select {
+  appearance: none;
+  cursor: pointer;
+  padding-right: 36px;
+}
+
+.ds-select-container::after {
+  content: '▼';
+  font-size: 10px;
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+/* Custom Checkbox via ::before and ::after */
+.ds-checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.ds-checkbox-hidden {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.ds-checkbox-label {
+  position: relative;
+  padding-left: 28px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+/* Box container */
+.ds-checkbox-label::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--bg-tertiary);
+  transition: var(--transition-smooth);
+}
+
+/* Check mark */
+.ds-checkbox-label::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: calc(50% - 1px);
+  transform: translate(0, -50%) rotate(45deg) scale(0);
+  width: 5px;
+  height: 10px;
+  border: 2px solid white;
+  border-left: 0;
+  border-top: 0;
+  transition: var(--transition-smooth);
+}
+
+/* Checked state changes */
+.ds-checkbox-hidden:checked + .ds-checkbox-label::before {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.ds-checkbox-hidden:checked + .ds-checkbox-label::after {
+  transform: translate(0, -50%) rotate(45deg) scale(1);
+}
+
+/* Readonly fields styling for unknown types */
+.ds-readonly-fallback-wrapper {
+  position: relative;
+}
+
+.ds-input-readonly {
+  background-color: var(--bg-tertiary);
+  border: 1px dashed var(--text-muted);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+
+.ds-readonly-tag {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Validation error inline */
+.ds-error-text {
+  color: var(--error-color);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Button styles */
+.ds-btn {
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: var(--transition-smooth);
+}
+
+.ds-btn-primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.ds-btn-primary:hover {
+  background-color: var(--primary-hover);
+}
+
+.ds-btn-secondary {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.ds-btn-secondary:hover {
+  background-color: var(--border-color);
+}
+
+.ds-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 18px;
+}
+
+/* Table styling */
+.ds-table-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ds-search-wrapper {
+  position: relative;
+  min-width: 200px;
+}
+
+.ds-search-input {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 8px 32px 8px 12px;
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+}
+
+.ds-search-input:focus {
+  border-color: var(--primary-color);
+  background-color: var(--bg-secondary);
+}
+
+.ds-search-clear-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ds-table-responsive-container {
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.ds-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+
+.ds-table th {
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  padding: 12px 16px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.ds-th-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.ds-th-sortable:hover {
+  background-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.ds-th-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ds-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.ds-table tr:last-child td {
+  border-bottom: none;
+}
+
+.ds-table tr:hover td {
+  background-color: rgba(99, 102, 241, 0.02);
+}
+
+.ds-table-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ds-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: var(--transition-smooth);
+}
+
+.ds-action-btn:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.ds-table-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.ds-badge-success {
+  background-color: var(--success-bg);
+  border: 1px solid var(--success-border);
+  color: var(--success-color);
+}
+
+.ds-badge-secondary {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.ds-table-footer {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+}
+
+/* Dashboard Widget layout */
+.ds-dashboard-grid-container {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-auto-rows: minmax(100px, auto);
+  gap: 20px;
+}
+
+.ds-widget-card {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 18px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.ds-widget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.ds-widget-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.ds-metric-value {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+}
+
+.ds-metric-subtext {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Mini Bar Chart */
+.ds-chart-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 80px;
+  margin-top: 8px;
+}
+
+.ds-chart-value-overlay {
+  display: flex;
+  flex-direction: column;
+}
+
+.ds-chart-val {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.ds-chart-lbl {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ds-mini-bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 100%;
+}
+
+.ds-chart-bar {
+  width: 8px;
+  border-radius: 2px;
+  background-color: var(--bar-color);
+}
+
+/* Activity logs feed widget */
+.ds-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.ds-activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ds-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.ds-dot-green { background-color: var(--success-color); }
+.ds-dot-blue { background-color: var(--accent-color); }
+.ds-dot-purple { background-color: var(--primary-color); }
+
+.ds-item-txt {
+  display: flex;
+  flex-direction: column;
+}
+
+.ds-item-msg {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.ds-item-time {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Schema Editor Side bar styling */
+.ds-editor-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.ds-editor-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.ds-json-editor-area {
+  flex: 1;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ds-textarea-json {
+  flex: 1;
+  min-height: 250px;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  padding: 12px;
+  resize: none;
+  outline: none;
+}
+
+.ds-textarea-json:focus {
+  border-color: var(--primary-color);
+  background-color: var(--bg-secondary);
+}
+
+/* Warn/Validation alerts block in Debug Mode */
+.ds-validation-log-card {
+  padding: 16px;
+  background-color: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-radius: 8px;
+  color: var(--warning-color);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ds-validation-heading {
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ds-validation-ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ds-validation-li {
+  color: var(--text-secondary);
+}
+
+/* Debug panel details wrapper */
+.ds-debug-grid {
+  background-color: var(--bg-tertiary);
+  border-top: 1px solid var(--border-color);
+  padding: 16px 20px;
+  font-size: 12px;
+  font-family: monospace;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ds-debug-line {
+  display: flex;
+  justify-content: space-between;
+}
+
+.ds-debug-key {
+  color: var(--text-muted);
+}
+
+.ds-debug-val {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Skeletons classes */
+.ds-skeleton-card {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ds-skeleton-title {
+  height: 24px;
+  width: 180px;
+}
+
+.ds-skeleton-label {
+  height: 14px;
+  width: 80px;
+  margin-bottom: 6px;
+}
+
+.ds-skeleton-input {
+  height: 38px;
+  width: 100%;
+}
+
+.ds-table-skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ds-table-skeleton-row {
+  height: 42px;
+  width: 100%;
+}
+
+.ds-dashboard-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.ds-skeleton-widget {
+  height: 120px;
+  width: 100%;
+}
+
+.ds-empty-section-container {
+  padding: 24px;
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-tertiary);
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 14px;
 }
